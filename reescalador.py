@@ -111,7 +111,7 @@ class ResizerApp(ctk.CTk):
 
     def manager_process(self):
         # 1. Configuración
-        scale_factor = 3 # Haremos la imagen el doble de grande
+        scale_factor = 2 # Haremos la imagen el doble de grande
         w, h = self.original_image.size
         new_w, new_h = w * scale_factor, h * scale_factor
         
