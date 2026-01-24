@@ -4,7 +4,6 @@ from tkinter import filedialog
 import threading
 import time
 import math
-print("\n\nSi el programa se cierra de repente deten la ejecucion e intenta correrlo de nuevo.\n")
 
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
