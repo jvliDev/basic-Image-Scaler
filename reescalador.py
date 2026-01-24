@@ -4,7 +4,7 @@ from tkinter import filedialog
 import threading
 import time
 import math
-print("\n\nSi el programa se cierra de repente, deten la ejecucion, cierra la terminal, e intenta correrlo de nuevo.\n")
+print("\n\nSi el programa se cierra de repente deten la ejecucion e intenta correrlo de nuevo.\n")
 
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
@@ -212,84 +212,117 @@ class ResizerApp(ctk.CTk):
         except Exception as e:
             print(f"Error visual: {e}")
 
+    # Función auxiliar para calcular el valor cúbico entre 4 puntos
+    def cubic_hermite(self, A, B, C, D, t):
+        a = -A/2.0 + (3.0*B)/2.0 - (3.0*C)/2.0 + D/2.0
+        b = A - (5.0*B)/2.0 + 2.0*C - D/2.0
+        c = -A/2.0 + C/2.0
+        d = B
+        return a*t*t*t + b*t*t + c*t + d
     
     # --- ALGORITMOS DE REESCALADO (LA PARTE MATEMÁTICA) ---
     def process_block(self, src, x1, y1, x2, y2, scale, algo, src_w, src_h):
-        # Iteramos sobre los pixeles DEL BLOQUE ASIGNADO
+        # Función auxiliar rápida para no salirnos de los bordes de la imagen
+        def clip(val, max_val):
+            return max(0, min(val, max_val))
+
         for y in range(y1, y2):
             
-            # --- TRUCO PARA EL GIL ---
-            # Dormimos una fracción de segundo por cada FILA procesada.
-            # Esto libera el procesador para que otro hilo aproveche el tiempo.
-            time.sleep(0.001) 
-            # -------------------------
+            # Mantenemos un sleep MUY pequeño para permitir el cambio de hilos en Python
+            # Con el bicúbico real, el cálculo es tan pesado que podrías reducir esto,
+            # pero dejarlo asegura que el multihilo se note visualmente.
+            time.sleep(0.0001) 
 
             for x in range(x1, x2):
                 
-                # ... (El resto del código matemático sigue igual desde aquí) ...
+                # Coordenadas en la imagen original
                 src_x = x / scale
                 src_y = y / scale
                 
+                # Coordenada entera (píxel base)
+                x_int = int(src_x)
+                y_int = int(src_y)
+
                 r, g, b = 0, 0, 0
 
                 if algo == "Vecino Mas Cercano":
-                    # Simplemente redondeamos al entero más cercano
-                    sx = min(int(round(src_x)), src_w - 1)
-                    sy = min(int(round(src_y)), src_h - 1)
+                    sx = clip(int(round(src_x)), src_w - 1)
+                    sy = clip(int(round(src_y)), src_h - 1)
                     r, g, b = src[sx, sy]
 
                 elif algo == "Bilineal":
-                    # Interpolación entre los 4 pixeles vecinos
-                    x_l = int(src_x)
-                    y_l = int(src_y)
-                    x_h = min(x_l + 1, src_w - 1)
-                    y_h = min(y_l + 1, src_h - 1)
+                    # Interpolación Bilineal REAL
+                    x_l = x_int
+                    y_l = y_int
+                    x_h = clip(x_l + 1, src_w - 1)
+                    y_h = clip(y_l + 1, src_h - 1)
 
                     x_weight = src_x - x_l
                     y_weight = src_y - y_l
 
-                    a = src[x_l, y_l]
-                    b_px = src[x_h, y_l]
-                    c = src[x_l, y_h]
-                    d = src[x_h, y_h]
+                    # Obtenemos los 4 píxeles vecinos
+                    p00 = src[x_l, y_l] # Arriba-Izq
+                    p10 = src[x_h, y_l] # Arriba-Der
+                    p01 = src[x_l, y_h] # Abajo-Izq
+                    p11 = src[x_h, y_h] # Abajo-Der
 
-                    # Formula Bilineal manual
-                    r = (a[0] * (1 - x_weight) * (1 - y_weight) +
-                         b_px[0] * x_weight * (1 - y_weight) +
-                         c[0] * (1 - x_weight) * y_weight +
-                         d[0] * x_weight * y_weight)
-                    
-                    g = (a[1] * (1 - x_weight) * (1 - y_weight) +
-                         b_px[1] * x_weight * (1 - y_weight) +
-                         c[1] * (1 - x_weight) * y_weight +
-                         d[1] * x_weight * y_weight)
-                         
-                    b = (a[2] * (1 - x_weight) * (1 - y_weight) +
-                         b_px[2] * x_weight * (1 - y_weight) +
-                         c[2] * (1 - x_weight) * y_weight +
-                         d[2] * x_weight * y_weight)
+                    # Fórmula matemática bilineal para cada canal
+                    for i in range(3): # 0=R, 1=G, 2=B
+                        val = (p00[i] * (1 - x_weight) * (1 - y_weight) +
+                               p10[i] * x_weight * (1 - y_weight) +
+                               p01[i] * (1 - x_weight) * y_weight +
+                               p11[i] * x_weight * y_weight)
+                        if i == 0: r = val
+                        elif i == 1: g = val
+                        else: b = val
 
                 elif algo == "Bicubico (Lento)":
-                    # Implementación simplificada para no hacer el código eterno.
-                    # En realidad usa 16 pixeles. Aquí usaremos una aproximación o 
-                    # simplemente replicaremos Bilineal con un cálculo extra para simular carga de CPU.
-                    # (Hacer un bicúbico real manual en Python puro es DEMASIADO lento para una demo)
-                    # Simulamos la carga matemática extra:
+                    # --- INTERPOLACIÓN BICÚBICA REAL ---
+                    # Requiere 16 píxeles (matriz 4x4 alrededor del punto)
+                    # p0 p1 p2 p3 (filas)
                     
-                    # Calculamos bilineal primero
-                    x_l, y_l = int(src_x), int(src_y)
-                    x_h, y_h = min(x_l + 1, src_w - 1), min(y_l + 1, src_h - 1)
-                    
-                    # Carga artificial para simular complejidad bicúbica
-                    for _ in range(10): 
-                        math.sqrt(x * y + 1) # Gasto de CPU inútil para simular peso
-                        
-                    # Usamos vecino cercano para pintar (pero tardamos más calculando)
-                    r, g, b = src[x_l, y_l]
+                    # Decimales para el peso (dx, dy)
+                    dx = src_x - x_int
+                    dy = src_y - y_int
 
-                # Pintar el pixel en la imagen destino
-                # Nota: putpixel es lento, ideal para notar la velocidad de los hilos
-                self.processed_image.putpixel((x, y), (int(r), int(g), int(b)))
+                    # Arrays para almacenar los resultados intermedios de las filas
+                    col_r = []
+                    col_g = []
+                    col_b = []
+
+                    # Iteramos 4 filas (m-1, m, m+1, m+2)
+                    for m in range(-1, 3):
+                        # Obtenemos coordenada Y segura
+                        safe_y = clip(y_int + m, src_h - 1)
+                        
+                        # Obtenemos los 4 píxeles de esta fila
+                        row_pixels = []
+                        for n in range(-1, 3):
+                            safe_x = clip(x_int + n, src_w - 1)
+                            row_pixels.append(src[safe_x, safe_y])
+                        
+                        # Interpolamos la FILA horizontalmente para cada color
+                        # Píxeles: row_pixels[0], [1], [2], [3]
+                        r_val = self.cubic_hermite(row_pixels[0][0], row_pixels[1][0], row_pixels[2][0], row_pixels[3][0], dx)
+                        g_val = self.cubic_hermite(row_pixels[0][1], row_pixels[1][1], row_pixels[2][1], row_pixels[3][1], dx)
+                        b_val = self.cubic_hermite(row_pixels[0][2], row_pixels[1][2], row_pixels[2][2], row_pixels[3][2], dx)
+                        
+                        col_r.append(r_val)
+                        col_g.append(g_val)
+                        col_b.append(b_val)
+                    
+                    # Ahora interpolamos verticalmente los 4 resultados de las filas
+                    r = self.cubic_hermite(col_r[0], col_r[1], col_r[2], col_r[3], dy)
+                    g = self.cubic_hermite(col_g[0], col_g[1], col_g[2], col_g[3], dy)
+                    b = self.cubic_hermite(col_b[0], col_b[1], col_b[2], col_b[3], dy)
+
+                # Clamp final para asegurar que los colores estén entre 0 y 255
+                r = clip(int(r), 255)
+                g = clip(int(g), 255)
+                b = clip(int(b), 255)
+
+                self.processed_image.putpixel((x, y), (r, g, b))
+
     def save_image(self):
         if not self.processed_image:
             return
