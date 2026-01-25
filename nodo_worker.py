@@ -2,9 +2,11 @@ import socket
 import struct
 
 def procesar_pixel_remoto(r, g, b):
-    # Fórmula de luminosidad para escala de grises
-    promedio = int(r * 0.299 + g * 0.587 + b * 0.114)
-    return promedio, promedio, promedio
+    # Lógica simple para cambiar color y probar
+    new_r = min(255, int(r * 1.2))
+    new_g = min(255, int(g * 0.9))
+    new_b = min(255, int(b + 50))
+    return new_r, new_g, new_b
 
 def iniciar_servidor():
     # IMPORTANTE: 0.0.0.0 para aceptar conexiones de fuera
@@ -41,7 +43,7 @@ def iniciar_servidor():
                             print(f"Procesando flujo de datos... {pixels_procesados} px completados", end='\r')
                             
                     except Exception as e:
-                        print(f"Error procesando paquete: {e}")
+                        print(f"❌ Error procesando paquete: {e}")
                         break
 
 if __name__ == "__main__":
