@@ -228,7 +228,7 @@ class ResizerApp(ctk.CTk):
 
         # Si usas servera/serverb, pon sus IPs reales aquí.
         
-        NODO_IP = '127.0.0.1' 
+        NODO_IP = '127.0.0.1' # CAMBIAR A LA IP DEL NODO WORKER
         NODO_PORT = 65432
 
         # Si el modo es Cluster, intentamos conectar una vez por bloque
@@ -236,10 +236,11 @@ class ResizerApp(ctk.CTk):
         if algo == "Procesamiento en Cluster":
             try:
                 socket_cluster = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                socket_cluster.settimeout(2) # Importante: timeout para no congelar si falla
                 socket_cluster.connect((NODO_IP, NODO_PORT))
-            except:
-                print("Error: No se encontró el Nodo Cluster")
-                return # Si falla, abortamos este bloque
+            except Exception as e:
+                print(f"Error conectando al nodo: {e}")
+                return
         def clip(val, max_val):
             return max(0, min(val, max_val))
 
@@ -248,7 +249,7 @@ class ResizerApp(ctk.CTk):
             # Mantenemos un sleep MUY pequeño para permitir el cambio de hilos en Python
             # Con el bicúbico real, el cálculo es tan pesado que podrías reducir esto,
             # pero dejarlo asegura que el multihilo se note visualmente.
-            time.sleep(0.0001) 
+            # time.sleep(0.0001) 
 
             for x in range(x1, x2):
                 
@@ -261,8 +262,26 @@ class ResizerApp(ctk.CTk):
                 y_int = int(src_y)
 
                 r, g, b = 0, 0, 0
-
-                if algo == "Vecino Mas Cercano":
+                
+                if algo == "Procesamiento en Cluster" and socket_cluster:
+                    try:
+                        # Enviar (Pack 3 bytes)
+                        socket_cluster.sendall(struct.pack('BBB', r, g, b))
+                        
+                        # Recibir (Esperamos 3 bytes de vuelta)
+                        data = socket_cluster.recv(3)
+                        
+                        if len(data) == 3:
+                            r, g, b = struct.unpack('BBB', data)
+                        else:
+                            # Si llegan datos incompletos, pintamos rojo de error
+                            r, g, b = 255, 0, 0 
+                            
+                    except Exception as e:
+                        print(f"Error transmisión: {e}")
+                        r, g, b = 255, 0, 0 # Error visible en rojo
+                
+                elif algo == "Vecino Mas Cercano":
                     sx = clip(int(round(src_x)), src_w - 1)
                     sy = clip(int(round(src_y)), src_h - 1)
                     r, g, b = src[sx, sy]
@@ -339,6 +358,9 @@ class ResizerApp(ctk.CTk):
                 b = clip(int(b), 255)
 
                 self.processed_image.putpixel((x, y), (r, g, b))
+            # Cerrar conexión al terminar el bloque
+        if socket_cluster:
+            socket_cluster.close()
 
     def save_image(self):
         if not self.processed_image:
